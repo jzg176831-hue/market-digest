@@ -6,7 +6,7 @@
  *   3. Embedding 相似度预聚类 → LLM 同事件归类
  *   4. Step1 多源组总结 / Step2 单篇筛选总结
  *   5. 写 finance_clusters
- *   6. 格式化报告 → 输出 OpenClaw reply 标记（由 OpenClaw 统一推送；不落盘 reports/）
+ *   6. 格式化报告 → 输出 skill reply 标记（由框架统一推送；不落盘 reports/）
  *
  * 对外导出 processAndReport(date)。
  */
@@ -461,10 +461,10 @@ async function generateReport(date) {
     '',
   ].join('\n');
 
-  log(`报告已生成（仅 stdout OpenClaw 标记 + DB clusters，未写 reports/）`);
+  log(`报告已生成（仅 stdout skill 标记 + DB clusters，未写 reports/）`);
 
-  // 通过 OpenClaw reply 标记回传内容，由 OpenClaw 统一推送到配置的渠道（飞书/企微/微信等）
-  process.stdout.write(`__OPENCLAW_REPLY_START__\n${reportContent}\n__OPENCLAW_REPLY_END__\n`);
+  // 通过 skill reply 标记回传内容，由框架统一推送到配置的渠道（飞书/企微/微信等）
+  process.stdout.write(`__SKILL_REPLY_START__\n${reportContent}\n__SKILL_REPLY_END__\n`);
 
   return { reportContent, reportPath: null };
 }

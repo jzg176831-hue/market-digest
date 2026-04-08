@@ -8,10 +8,9 @@
  * 【DB】必填：在 DB_CONFIG 里填入数据库连接信息。
  *
  * 【LLM 主模型】可选：
- *   如果本机装了 OpenClaw 并已配置模型，会自动从
- *   ~/.openclaw/openclaw.json 读取当前默认模型的
- *   baseUrl / apiKey / model，不需要在这里填。
- *   没有 OpenClaw 时，或想使用不同模型时，才填 MODEL_CONFIG。
+ *   启动时会自动尝试从已知 AI 框架的配置文件中读取当前默认模型
+ *   的 baseUrl / apiKey / model，若能读到则无需在这里填写。
+ *   读不到，或想使用与框架默认不同的模型时，才填 MODEL_CONFIG。
  *
  * 【Embedding】可选：填写 OPENAI_EMBEDDING_CONFIG 中的 api_key、base_url、model（三者与服务商一致；api_key 留空则跳过向量去重，效果略弱但仍可运行）。
  * ─────────────────────────────────────────────────────
@@ -27,8 +26,8 @@ const DB_CONFIG = {
 };
 
 // LLM 主模型配置
-// 优先级：这里 → ~/.openclaw/openclaw.json 默认模型（兜底）
-// 填了就用这里的；留空时自动用 OpenClaw 当前配置的模型
+// 优先级：这里 → 框架配置文件中检测到的默认模型（兜底）
+// 填了就用这里的；留空时自动用框架当前配置的模型
 const MODEL_CONFIG = {
   model:       'deepseek-v3-1-250821',
   api_key:     'YOUR_LLM_API_KEY',

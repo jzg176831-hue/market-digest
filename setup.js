@@ -23,6 +23,7 @@
 const { Pool } = require('pg');
 const fs        = require('fs');
 const path      = require('path');
+const os        = require('os');
 
 // ── 解析 CLI 参数 ──────────────────────────────────────────
 function parseArgs(argv) {
@@ -46,14 +47,46 @@ const dbName  = args['db-name']  || '';
 const dbUser  = args['db-user']  || '';
 const dbPass  = args['db-pass']  || '';
 
+// LLM 模型配置（可选，留空则自动检测框架配置或由用户事后手动填写 config.js）
+const cliModel   = args['model']    || '';
+const cliApiKey  = args['api-key']  || '';
+const cliBaseUrl = args['base-url'] || '';
+
 if (!dbHost || !dbName || !dbUser) {
   console.error('缺少必填参数：--db-host / --db-name / --db-user');
   console.error('用法：node setup.js --db-host HOST --db-name DB --db-user USER --db-pass PASS');
+  console.error('可选：--model MODEL --api-key KEY --base-url URL');
   process.exit(1);
 }
 
+// ── 检测框架模型配置 ────────────────────────────────────────
+function detectFrameworkModel() {
+  // OpenClaw
+  try {
+    const cfgPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    const primary = cfg?.agents?.defaults?.model?.primary;
+    if (primary) {
+      const slashIdx = primary.indexOf('/');
+      if (slashIdx !== -1) {
+        const providerName = primary.slice(0, slashIdx);
+        const modelId      = primary.slice(slashIdx + 1);
+        const provider = cfg?.models?.providers?.[providerName];
+        if (provider?.apiKey && provider?.baseUrl) {
+          return { model: modelId, apiKey: provider.apiKey, baseUrl: provider.baseUrl, source: 'OpenClaw' };
+        }
+      }
+    }
+  } catch (_) {}
+
+  // 可在此添加其他框架的检测逻辑
+
+  return null;
+}
+
 // ── 生成 config.js 内容 ────────────────────────────────────
-function buildConfigJs(dbCfg) {
+function buildConfigJs(dbCfg, modelCfg) {
+  const m = modelCfg || {};
   return `// PostgreSQL：抓取到的文章按批写入（每 10 篇一批）
 const DB_CONFIG = {
   host: '${dbCfg.host}',
@@ -64,11 +97,11 @@ const DB_CONFIG = {
 };
 
 // LLM 主模型配置
-// 优先使用这里的值；留空时自动读取 ~/.openclaw/openclaw.json 的默认模型。
+// 优先使用这里的值；留空时自动从已知框架配置文件中读取当前默认模型。
 const MODEL_CONFIG = {
-  model: '',
-  api_key: '',
-  base_url: '',
+  model: '${m.model || ''}',
+  api_key: '${m.apiKey || ''}',
+  base_url: '${m.baseUrl || ''}',
   temperature: 0.3
 };
 
@@ -171,8 +204,30 @@ async function main() {
 
   await pool.end().catch(() => {});
 
-  // 2. 写 config.js
-  const configContent = buildConfigJs(dbCfg);
+  // 2. 确定模型配置
+  let modelCfg = null;
+  if (cliModel && cliApiKey && cliBaseUrl) {
+    // 明确传入了模型参数，直接使用
+    modelCfg = { model: cliModel, apiKey: cliApiKey, baseUrl: cliBaseUrl };
+    console.log(`✓ 使用指定模型：${modelCfg.model}`);
+  } else {
+    // 尝试从框架配置中自动检测
+    const detected = detectFrameworkModel();
+    if (detected) {
+      console.log(`[DETECTED_MODEL] source=${detected.source} model=${detected.model} base_url=${detected.baseUrl}`);
+      // 如果有部分 CLI 参数则覆盖对应字段
+      modelCfg = {
+        model:   cliModel   || detected.model,
+        apiKey:  cliApiKey  || detected.apiKey,
+        baseUrl: cliBaseUrl || detected.baseUrl,
+      };
+    } else {
+      console.log('[DETECTED_MODEL] none');
+    }
+  }
+
+  // 3. 写 config.js
+  const configContent = buildConfigJs(dbCfg, modelCfg);
   const configPath = path.join(__dirname, 'config.js');
   fs.writeFileSync(configPath, configContent, 'utf8');
   console.log(`✓ config.js 已写入：${configPath}`);

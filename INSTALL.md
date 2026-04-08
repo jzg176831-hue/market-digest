@@ -6,10 +6,12 @@
 
 ---
 
-## 第 1 步：克隆仓库
+## 第 1 步：确定安装目录并克隆仓库
+
+根据当前使用的 AI 框架，选择合适的技能/工作区目录（例如：`~/<框架名>/workspace/skills/market-digest`）。如框架有约定的技能目录，请使用该目录；若不确定，可询问用户或使用 `~/market-digest`。
 
 ```bash
-git clone <用户提供的仓库地址> ~/.openclaw/workspace/skills/market-digest
+git clone <用户提供的仓库地址> <技能目录>
 ```
 
 如果目录已存在，跳过此步（说明已经克隆过）。
@@ -19,7 +21,7 @@ git clone <用户提供的仓库地址> ~/.openclaw/workspace/skills/market-dige
 ## 第 2 步：安装 Node.js 依赖
 
 ```bash
-cd ~/.openclaw/workspace/skills/market-digest && npm install
+cd <技能目录> && npm install
 ```
 
 ---
@@ -34,10 +36,19 @@ cd ~/.openclaw/workspace/skills/market-digest && npm install
 4. "数据库用户名是什么？"
 5. "数据库密码是什么？"
 
-收集完毕后，运行以下命令测试连接并写入配置：
+---
+
+## 第 4 步：配置 LLM 模型
+
+> **说明**：`setup.js` 会在启动时尝试读取已知 AI 框架在本机的配置文件（如
+> `~/.openclaw/openclaw.json` 等），若找到模型信息则自动写入 `config.js`，
+> 同时在输出中打印 `[DETECTED_MODEL]` 行，Agent 据此询问用户是否使用该模型。
+> 这是**读本地磁盘文件**实现的，与 LLM 本身无关。
+
+先运行以下命令（仅传数据库参数）：
 
 ```bash
-node ~/.openclaw/workspace/skills/market-digest/setup.js \
+node <技能目录>/setup.js \
   --db-host <host> \
   --db-port <port> \
   --db-name <dbname> \
@@ -45,17 +56,82 @@ node ~/.openclaw/workspace/skills/market-digest/setup.js \
   --db-pass <password>
 ```
 
-- 退出码 **0**：连接成功，继续下一步
-- 退出码 **1**：连接失败，将错误信息告知用户，请用户确认数据库是否可访问、密码是否正确
+### 情况 A：输出包含 `[DETECTED_MODEL] source=xxx model=xxx base_url=xxx`
+
+说明在本机找到了框架配置文件并读取到了模型信息。询问用户：
+
+> "检测到你当前配置的模型是 **[model]**（来自 [source]），是否用这个模型生成日报？"
+
+- **用户确认** → `config.js` 已自动写入，继续第 5 步。
+- **用户想换其他模型** → 按情况 B 重新运行。
+
+### 情况 B：输出包含 `[DETECTED_MODEL] none`，或用户要指定其他模型
+
+逐一询问：
+
+1. "请提供模型名称（如 `deepseek-v3`、`gpt-4o` 等）"
+2. "请提供 API Key"
+3. "请提供 API Base URL（如 `https://api.openai.com/v1`）"
+
+收集完毕后，重新运行 setup.js 并传入模型参数：
+
+```bash
+node <技能目录>/setup.js \
+  --db-host <host> \
+  --db-port <port> \
+  --db-name <dbname> \
+  --db-user <user> \
+  --db-pass <password> \
+  --model <model> \
+  --api-key <api_key> \
+  --base-url <base_url>
+```
+
+- 退出码 **0**：配置成功，继续第 5 步
+- 退出码 **1**：失败，将错误信息告知用户
 
 ---
 
-## 第 4 步：安装完成提示
+## 第 5 步：配置定时任务
+
+需要创建两个定时任务：
+
+| Cron 表达式 | 命令 | 说明 |
+|------------|------|------|
+| `0 8 * * *` | `node <技能目录>/daily-full.js` | 每天 8:00：抓取 + 聚类 + 生成日报 |
+| `0 0-7,9-23 * * *` | `node <技能目录>/fetch.js` | 每小时（非 8 点）：仅抓取，不生成日报 |
+
+**不同框架写法不同，请按以下步骤确认：**
+
+1. **确认当前框架的定时任务 API**：查阅当前 AI 框架的文档或可用工具，确认如何创建 cron 任务。例如：
+   - Claude Code：使用框架提供的 `schedule` / `CronCreate` 能力
+   - OpenClaw：在框架配置中添加 schedule 条目
+   - 其他框架：参照其定时任务/调度文档
+
+2. **创建上表中的两个任务**，工作目录设为 `<技能目录>`。
+
+3. 创建完成后，告知用户已配置的任务内容。
+
+> 若当前框架不支持定时任务，告知用户可手动用系统 cron 实现：
+> ```bash
+> crontab -e
+> # 添加以下两行（替换 <技能目录> 为实际路径）：
+> 0 8 * * *        node <技能目录>/daily-full.js >> <技能目录>/logs/daily.log 2>&1
+> 0 0-7,9-23 * * * node <技能目录>/fetch.js      >> <技能目录>/logs/fetch.log  2>&1
+> ```
+
+---
+
+## 第 6 步：安装完成提示
 
 向用户报告安装结果：
 
 ```
 ✅ 金融市场日报已安装完成！
+
+📅 已配置定时任务：
+  • 每天 8:00 自动生成并推送日报
+  • 每小时自动抓取最新财经资讯
 
 💬 您也可以随时对我说：
   • "生成财经日报" / "出个日报"   → 立即生成
@@ -73,3 +149,4 @@ node ~/.openclaw/workspace/skills/market-digest/setup.js \
 | `chromium` 启动失败 | 安装系统 Chrome：macOS `brew install --cask google-chrome`；Ubuntu `sudo apt install chromium-browser` |
 | `node` 找不到 | 确认已安装 Node.js ≥ 18：`node --version` |
 | 日报为空 | 先跑 `node fetch.js` 确认抓取正常，再跑 `node daily.js`；若希望一步完成抓取+日报，可跑 `node daily-full.js` |
+| 定时任务未触发 | 确认框架的调度服务正在运行；或检查系统 cron：`crontab -l` |

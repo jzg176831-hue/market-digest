@@ -1,8 +1,10 @@
 ---
 name: market-digest
-description: 金融市场日报。自动抓取财新、东方财富、新浪等多源财经资讯，按事件去重聚类，生成中国市场和国际市场两段日报，推送到配置的渠道。定时任务（fetch.js / daily-full.js）会直接触发此 skill 执行；用户主动触发日报时仅基于数据库生成，不额外抓取。如需安装此 skill，请阅读同目录下的 INSTALL.md。
+description: 金融市场日报。自动抓取财新、东方财富、新浪等多源财经资讯，按事件去重聚类，生成中国市场和国际市场两段日报，推送到配置的渠道。定时任务（fetch.js / daily-full.js）会直接触发此 skill 执行；用户主动触发日报时执行 daily.js，仅基于数据库生成，不额外抓取。如需安装此 skill，请阅读同目录下的 INSTALL.md。
 user-invocable: true
-metadata: {"openclaw":{"emoji":"📰","requires":{"bins":["node"]},"triggers":["抓金融市场文章","爬财经新闻","生成金融日报","生成财经日报","财经资讯汇总","金融市场日报","今日财经","昨日财经","抓一下财经","给我出日报","出个财经日报","跑一下日报","今天日报","今天财经","早报","财经早报"]}}
+# metadata 按框架填写各自的配置 key；以下 openclaw 段供 OpenClaw 框架读取，
+# 其他框架请参照各自文档在此添加对应配置段。
+metadata: {"openclaw":{"emoji":"📰","requires":{"bins":["node"]},"triggers":["抓金融市场文章","爬财经新闻","生成金融日报","生成财经日报","财经资讯汇总","金融市场日报","今日财经","昨日财经","抓一下财经","给我出日报","出个财经日报","跑一下日报","今天日报","今天财经","早报","财经早报","出日报","生成日报","财经","早报","市场","daily"]}}
 ---
 
 # 金融市场日报（market-digest）— 运行手册
@@ -67,7 +69,7 @@ node fetch.js
 | `node daily.js YYYY-MM-DD` | 该日 08:00 → 次日 08:00 | 用户指定日期 |
 | `node fetch.js` | 当前增量抓取 | 仅抓取，不生成报告 |
 
-工作目录：`~/.openclaw/workspace/skills/market-digest`
+工作目录：技能所在目录（安装时由 Agent 确定，参见 INSTALL.md 第 1 步）
 
 ---
 

@@ -83,12 +83,12 @@ command:          node fetch.js
 workingDirectory: ~/.openclaw/workspace/skills/market-digest
 ```
 
-**任务 2：每天早上 8 点自动生成日报**
+**任务 2：每天早上 8 点自动抓取并生成日报**
 
 ```
 name:             market-digest-daily-report
 schedule:         0 8 * * *
-command:          node daily.js
+command:          node daily-full.js
 workingDirectory: ~/.openclaw/workspace/skills/market-digest
 ```
 
@@ -120,4 +120,4 @@ workingDirectory: ~/.openclaw/workspace/skills/market-digest
 | DB 连接失败 | 确认数据库服务已启动、host/port 可访问、用户名密码正确 |
 | `chromium` 启动失败 | 安装系统 Chrome：macOS `brew install --cask google-chrome`；Ubuntu `sudo apt install chromium-browser` |
 | `node` 找不到 | 确认已安装 Node.js ≥ 18：`node --version` |
-| 日报为空 | 先跑 `node fetch.js` 确认抓取正常，再跑 `node daily.js` |
+| 日报为空 | 先跑 `node fetch.js` 确认抓取正常，再跑 `node daily.js`；若希望一步完成抓取+日报，可跑 `node daily-full.js` |

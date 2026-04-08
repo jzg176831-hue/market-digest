@@ -141,31 +141,82 @@ node <技能目录>/setup.js \
 
 ## 第 5 步：配置定时任务
 
-需要创建两个定时任务：
+需要创建两个定时任务（时区统一用 `Asia/Shanghai`）：
 
-| Cron 表达式 | 命令 | 说明 |
-|------------|------|------|
-| `0 8 * * *` | `node <技能目录>/daily-full.js` | 每天 8:00：抓取 + 聚类 + 生成日报 |
-| `0 0-7,9-23 * * *` | `node <技能目录>/fetch.js` | 每小时（非 8 点）：仅抓取，不生成日报 |
+| 触发时机 | Cron 表达式 | 说明 |
+|---------|------------|------|
+| 每天 8:00 | `0 8 * * *` | 完整日报：抓取 + 聚类 + 生成报告（`daily-full.js`） |
+| 每小时（非 8 点）| `0 0-7,9-23 * * *` | 仅抓取文章写入数据库（`fetch.js`） |
 
-**不同框架写法不同，请按以下步骤确认：**
+---
 
-1. **确认当前框架的定时任务 API**：查阅当前 AI 框架的文档或可用工具，确认如何创建 cron 任务。例如：
-   - Claude Code：使用框架提供的 `schedule` / `CronCreate` 能力
-   - OpenClaw：在框架配置中添加 schedule 条目
-   - 其他框架：参照其定时任务/调度文档
+### 方式 A：OpenClaw 框架
 
-2. **创建上表中的两个任务**，工作目录设为 `<技能目录>`。
+OpenClaw 的定时任务写在 `~/.openclaw/cron/jobs.json`。
+在该文件的 JSON 数组中追加以下两个条目（文件不存在则新建）：
 
-3. 创建完成后，告知用户已配置的任务内容。
+```json
+[
+  {
+    "jobId": "market-digest-daily",
+    "name": "金融市场日报 - 每日8点",
+    "enabled": true,
+    "schedule": { "kind": "cron", "expr": "0 8 * * *", "tz": "Asia/Shanghai" },
+    "sessionTarget": "isolated",
+    "payload": {
+      "kind": "agentTurn",
+      "message": "生成财经日报",
+      "timeoutSeconds": 1800,
+      "toolsAllow": ["exec", "read", "write"]
+    }
+  },
+  {
+    "jobId": "market-digest-fetch",
+    "name": "金融市场日报 - 每小时抓取",
+    "enabled": true,
+    "schedule": { "kind": "cron", "expr": "0 0-7,9-23 * * *", "tz": "Asia/Shanghai" },
+    "sessionTarget": "isolated",
+    "payload": {
+      "kind": "agentTurn",
+      "message": "抓一下财经新闻",
+      "timeoutSeconds": 3600,
+      "toolsAllow": ["exec", "read", "write"]
+    }
+  }
+]
+```
 
-> 若当前框架不支持定时任务，告知用户可手动用系统 cron 实现：
-> ```bash
-> crontab -e
-> # 添加以下两行（替换 <技能目录> 为实际路径）：
-> 0 8 * * *        node <技能目录>/daily-full.js >> <技能目录>/logs/daily.log 2>&1
-> 0 0-7,9-23 * * * node <技能目录>/fetch.js      >> <技能目录>/logs/fetch.log  2>&1
-> ```
+> **说明**：OpenClaw cron 通过向 Agent 发消息触发，Agent 收到后根据 SKILL.md 的触发词路由到对应脚本，不需要直接填命令行。
+
+写入后确认 `~/.openclaw/openclaw.json` 中 cron 已启用：
+
+```json5
+{
+  cron: {
+    enabled: true,
+    store: "~/.openclaw/cron/jobs.json"
+  }
+}
+```
+
+---
+
+### 方式 B：其他框架
+
+参照当前框架的定时任务文档，用上述两个 cron 表达式创建任务，触发内容分别为"生成财经日报"和"抓一下财经新闻"。
+
+---
+
+### 方式 C：系统 cron（兜底）
+
+若框架不支持定时任务：
+
+```bash
+crontab -e
+# 添加以下两行（替换 <技能目录> 为实际路径，如 ~/.openclaw/workspace/skills/market-digest）：
+0 8 * * *        node <技能目录>/daily-full.js >> <技能目录>/logs/daily.log 2>&1
+0 0-7,9-23 * * * node <技能目录>/fetch.js      >> <技能目录>/logs/fetch.log  2>&1
+```
 
 ---
 

@@ -1,0 +1,16 @@
+{
+  "name": "market-digest",
+  "version": "1.0.0",
+  "description": "金融市场日报：多源抓取财经资讯，事件聚类去重，生成中国+国际市场日报",
+  "main": "daily.js",
+  "scripts": {
+    "fetch": "node fetch.js",
+    "daily": "node daily.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "pg": "^8.11.0",
+    "playwright-core": "^1.49.0"
+  }
+}

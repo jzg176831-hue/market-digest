@@ -3,10 +3,9 @@
  * setup.js — 安装配置脚本（由 Agent 调用，也可手动执行）
  *
  * 功能：
- *   1. 解析 CLI 参数中的数据库连接信息（和可选的 Embedding 配置）
+ *   1. 解析 CLI 参数中的数据库连接信息
  *   2. 测试数据库连接
- *   3. 建表（幂等，可重复执行）并插入 __global__ 行
- *   4. 将配置写入 config.js
+ *   3. 将配置写入 config.js
  *
  * 用法：
  *   node setup.js \
@@ -14,10 +13,7 @@
  *     --db-port 5432 \
  *     --db-name mydb \
  *     --db-user postgres \
- *     --db-pass secret \
- *     [--embedding-key sk-xxx] \
- *     [--embedding-url https://api.openai.com/v1] \
- *     [--embedding-model text-embedding-ada-002]
+ *     --db-pass secret
  *
  * 退出码：
  *   0 = 成功
@@ -50,83 +46,14 @@ const dbName  = args['db-name']  || '';
 const dbUser  = args['db-user']  || '';
 const dbPass  = args['db-pass']  || '';
 
-const embKey   = args['embedding-key']   || '';
-const embUrl   = args['embedding-url']   || '';
-const embModel = args['embedding-model'] || 'text-embedding-ada-002';
-
 if (!dbHost || !dbName || !dbUser) {
   console.error('缺少必填参数：--db-host / --db-name / --db-user');
   console.error('用法：node setup.js --db-host HOST --db-name DB --db-user USER --db-pass PASS');
   process.exit(1);
 }
 
-// ── 建表 SQL（幂等） ──────────────────────────────────────
-const SETUP_SQL = `
-CREATE TABLE IF NOT EXISTS finance_articles (
-  id            SERIAL PRIMARY KEY,
-  url           TEXT NOT NULL UNIQUE,
-  title         TEXT,
-  publish_at    TIMESTAMPTZ NULL,
-  author        TEXT,
-  summary       TEXT,
-  content       TEXT,
-  content_brief TEXT,
-  site          TEXT NOT NULL DEFAULT 'unknown',
-  embedding     TEXT NULL,
-  cluster_rank  INT  NULL,
-  deleted_at    TIMESTAMPTZ NULL,
-  created_at    TIMESTAMPTZ DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_finance_articles_url_unique
-  ON finance_articles (url);
-
-CREATE INDEX IF NOT EXISTS idx_finance_articles_publish_at
-  ON finance_articles (publish_at)
-  WHERE publish_at IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_finance_articles_deleted_at
-  ON finance_articles (deleted_at)
-  WHERE deleted_at IS NULL;
-
-CREATE TABLE IF NOT EXISTS finance_clusters (
-  id                    SERIAL PRIMARY KEY,
-  report_date           DATE NOT NULL,
-  cluster_rank          INT  NOT NULL,
-  summary               TEXT,
-  china_summary         TEXT,
-  international_summary TEXT,
-  score                 NUMERIC NULL,
-  created_at            TIMESTAMPTZ DEFAULT NOW(),
-  updated_at            TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (report_date, cluster_rank)
-);
-
-CREATE INDEX IF NOT EXISTS idx_finance_clusters_report_date
-  ON finance_clusters (report_date);
-
-CREATE TABLE IF NOT EXISTS finance_crawl_schedule (
-  id            SERIAL PRIMARY KEY,
-  source        TEXT NOT NULL UNIQUE DEFAULT '__global__',
-  status        TEXT NOT NULL DEFAULT 'idle',
-  last_crawl_at TIMESTAMPTZ NULL,
-  started_at    TIMESTAMPTZ NULL,
-  created_at    TIMESTAMPTZ DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ DEFAULT NOW()
-);
-
-INSERT INTO finance_crawl_schedule (source, status)
-VALUES ('__global__', 'idle')
-ON CONFLICT (source) DO NOTHING;
-`;
-
 // ── 生成 config.js 内容 ────────────────────────────────────
-function buildConfigJs(dbCfg, embCfg) {
-  const embKeyVal   = embCfg.key   ? `'${embCfg.key}'`   : "''";
-  const embUrlVal   = embCfg.url   ? `'${embCfg.url}'`   : "''";
-  const embModelVal = embCfg.model ? `'${embCfg.model}'` : "'text-embedding-ada-002'";
-
+function buildConfigJs(dbCfg) {
   return `// PostgreSQL：抓取到的文章按批写入（每 10 篇一批）
 const DB_CONFIG = {
   host: '${dbCfg.host}',
@@ -204,12 +131,12 @@ const SOURCES = [
   }
 ];
 
-// OpenAI Embedding 配置
+// OpenAI Embedding 配置（可选；如不需要可保持留空）
 // 留空则跳过 Embedding 去重（去重效果会减弱，但仍可正常运行）
 const OPENAI_EMBEDDING_CONFIG = {
-  api_key: ${embKeyVal},
-  base_url: ${embUrlVal},
-  model: ${embModelVal},
+  api_key: '',
+  base_url: '',
+  model: '',
 };
 
 // Embedding 相似度阈值（余弦相似度）
@@ -242,33 +169,16 @@ async function main() {
     process.exit(1);
   }
 
-  // 2. 建表
-  console.log('正在建表（幂等，已存在则跳过）...');
-  try {
-    await pool.query(SETUP_SQL);
-    console.log('✓ 数据库表初始化完成');
-  } catch (e) {
-    console.error(`✗ 建表失败：${e.message}`);
-    await pool.end().catch(() => {});
-    process.exit(1);
-  }
-
   await pool.end().catch(() => {});
 
-  // 3. 写 config.js
-  const embCfg = { key: embKey, url: embUrl, model: embModel };
-  const configContent = buildConfigJs(dbCfg, embCfg);
+  // 2. 写 config.js
+  const configContent = buildConfigJs(dbCfg);
   const configPath = path.join(__dirname, 'config.js');
   fs.writeFileSync(configPath, configContent, 'utf8');
   console.log(`✓ config.js 已写入：${configPath}`);
 
   console.log('');
   console.log('✓ 配置完成！');
-  if (!embKey) {
-    console.log('  提示：未配置 Embedding API Key，去重将使用标题相似度模式（效果略弱）。');
-    console.log('  如需启用 Embedding 去重，稍后可重新运行：');
-    console.log('    node setup.js --db-host ... --embedding-key YOUR_KEY --embedding-url https://... --embedding-model YOUR_MODEL');
-  }
 }
 
 main().catch(e => {

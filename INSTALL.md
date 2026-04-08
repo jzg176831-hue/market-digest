@@ -34,7 +34,7 @@ cd ~/.openclaw/workspace/skills/market-digest && npm install
 4. "数据库用户名是什么？"
 5. "数据库密码是什么？"
 
-收集完毕后，运行以下命令测试连接并初始化：
+收集完毕后，运行以下命令测试连接并写入配置：
 
 ```bash
 node ~/.openclaw/workspace/skills/market-digest/setup.js \
@@ -50,60 +50,12 @@ node ~/.openclaw/workspace/skills/market-digest/setup.js \
 
 ---
 
-## 第 4 步：询问 Embedding 配置（可跳过）
-
-问用户：
-
-> "是否有 OpenAI 兼容的 Embedding API Key？它能让文章去重效果更好。如果没有或不确定，跳过也完全没问题，系统会自动用标题相似度替代。"
-
-**有 Embedding Key**：询问 API Key、接口地址（OpenAI 兼容的 base URL）以及 **Embedding 模型名**（须与服务商文档一致，如 `text-embedding-3-small`、云厂商给出的模型 ID），然后重新运行 setup.js 补充参数：
-
-```bash
-node ~/.openclaw/workspace/skills/market-digest/setup.js \
-  --db-host <host> --db-port <port> --db-name <dbname> --db-user <user> --db-pass <password> \
-  --embedding-key <api_key> \
-  --embedding-url <base_url> \
-  --embedding-model <model_name>
-```
-
-**没有**：直接跳过，继续第 5 步。
-
----
-
-## 第 5 步：创建定时任务
-
-使用 `mcp__scheduled-tasks__create_scheduled_task` 工具创建两个定时任务：
-
-**任务 1：每小时整点后台抓取文章（8 点除外，避免与日报冲突）**
-
-```
-name:             market-digest-fetch-hourly
-schedule:         0 0-7,9-23 * * *
-command:          node fetch.js
-workingDirectory: ~/.openclaw/workspace/skills/market-digest
-```
-
-**任务 2：每天早上 8 点自动抓取并生成日报**
-
-```
-name:             market-digest-daily-report
-schedule:         0 8 * * *
-command:          node daily-full.js
-workingDirectory: ~/.openclaw/workspace/skills/market-digest
-```
-
----
-
-## 第 6 步：安装完成提示
+## 第 4 步：安装完成提示
 
 向用户报告安装结果：
 
 ```
 ✅ 金融市场日报已安装完成！
-
-📅 已创建两个定时任务：
-  • 每天 08:00  自动抓取 + 生成日报，推送到您的配置渠道
-  • 每小时整点  后台静默抓取最新财经资讯（非 8 点）
 
 💬 您也可以随时对我说：
   • "生成财经日报" / "出个日报"   → 立即生成

@@ -28,8 +28,6 @@ DB_PASS="${DB_PASS:-}"
 LLM_API_KEY="${LLM_API_KEY:-}"
 LLM_BASE_URL="${LLM_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}"
 LLM_MODEL="${LLM_MODEL:-deepseek-v3-1-250821}"
-OPENAI_API_KEY="${OPENAI_API_KEY:-}"
-OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,8 +39,6 @@ while [[ $# -gt 0 ]]; do
     --llm-key)  LLM_API_KEY="$2"; shift 2 ;;
     --llm-url)  LLM_BASE_URL="$2"; shift 2 ;;
     --llm-model) LLM_MODEL="$2"; shift 2 ;;
-    --openai-key) OPENAI_API_KEY="$2"; shift 2 ;;
-    --openai-url) OPENAI_BASE_URL="$2"; shift 2 ;;
     *) echo "Unknown arg: $1"; shift ;;
   esac
 done
@@ -103,9 +99,9 @@ const SOURCES = [
 ];
 
 const OPENAI_EMBEDDING_CONFIG = {
-  api_key:  '${OPENAI_API_KEY:-YOUR_OPENAI_API_KEY}',
-  model:    'text-embedding-ada-002',
-  base_url: '${OPENAI_BASE_URL}',
+  api_key:  '',
+  model:    '',
+  base_url: '',
 };
 
 const EMBEDDING_DEDUP_THRESHOLD = 0.92;
@@ -121,23 +117,8 @@ JSEOF
     [[ -z "$DB_NAME" ]]    && yellow "   DB_CONFIG.database (数据库名)"
     [[ -z "$DB_PASS" ]]    && yellow "   DB_CONFIG.password (数据库密码)"
     [[ -z "$LLM_API_KEY" ]] && yellow "   MODEL_CONFIG.api_key (LLM API Key)"
-    [[ -z "$OPENAI_API_KEY" ]] && yellow "   OPENAI_EMBEDDING_CONFIG.api_key (Embedding API Key)"
     yellow ""
   fi
-fi
-
-# ---------- 初始化数据库 ----------
-if [[ -n "$DB_HOST" && -n "$DB_NAME" && -n "$DB_PASS" ]]; then
-  green ">>> 初始化数据库表..."
-  if command -v psql &>/dev/null; then
-    PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
-      -f "$SKILL_DIR/sql/setup.sql" && green "✓ 数据库表已初始化" \
-      || yellow "⚠  数据库初始化失败，请手动执行 sql/setup.sql"
-  else
-    yellow "⚠  未找到 psql，请手动执行: psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f sql/setup.sql"
-  fi
-else
-  yellow "⚠  未提供完整数据库参数，跳过建表。请手动执行 sql/setup.sql"
 fi
 
 # ---------- 完成 ----------
@@ -153,5 +134,4 @@ echo "    node daily-full.js      # 抓取 + 聚类 + 生成日报"
 echo "    node daily.js 2026-04-06  # 指定日期"
 echo ""
 echo "  配置文件：$SKILL_DIR/config.js"
-echo "  数据库 SQL：$SKILL_DIR/sql/setup.sql"
 echo ""

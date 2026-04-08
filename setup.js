@@ -20,10 +20,11 @@
  *   1 = 失败（打印错误原因）
  */
 
-const { Pool } = require('pg');
-const fs        = require('fs');
-const path      = require('path');
-const os        = require('os');
+const { Pool }      = require('pg');
+const { execSync }  = require('child_process');
+const fs            = require('fs');
+const path          = require('path');
+const os            = require('os');
 
 // ── 解析 CLI 参数 ──────────────────────────────────────────
 function parseArgs(argv) {
@@ -48,14 +49,16 @@ const dbUser  = args['db-user']  || '';
 const dbPass  = args['db-pass']  || '';
 
 // LLM 模型配置（可选，留空则自动检测框架配置或由用户事后手动填写 config.js）
-const cliModel   = args['model']    || '';
-const cliApiKey  = args['api-key']  || '';
-const cliBaseUrl = args['base-url'] || '';
+const cliModel      = args['model']       || '';
+const cliApiKey     = args['api-key']     || '';
+const cliBaseUrl    = args['base-url']    || '';
+// Chrome/Chromium 路径（可选，留空则自动检测）
+const cliChromePath = args['chrome-path'] || '';
 
 if (!dbHost || !dbName || !dbUser) {
   console.error('缺少必填参数：--db-host / --db-name / --db-user');
   console.error('用法：node setup.js --db-host HOST --db-name DB --db-user USER --db-pass PASS');
-  console.error('可选：--model MODEL --api-key KEY --base-url URL');
+  console.error('可选：--model MODEL --api-key KEY --base-url URL --chrome-path PATH');
   process.exit(1);
 }
 
@@ -84,9 +87,48 @@ function detectFrameworkModel() {
   return null;
 }
 
+// ── 检测 Chrome/Chromium 可执行文件 ───────────────────────────
+/**
+ * 依次尝试：
+ *   1. 常见系统安装路径（直接 fs.existsSync）
+ *   2. which 命令查找 PATH 中的可执行文件
+ * 返回找到的第一个可用路径，否则返回 null。
+ */
+function detectChrome() {
+  const knownPaths = [
+    // Linux
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/local/bin/chromium',
+    '/snap/bin/chromium',
+    // macOS
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+  ];
+
+  for (const p of knownPaths) {
+    if (fs.existsSync(p)) return p;
+  }
+
+  // 通过 which 查 PATH
+  for (const cmd of ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']) {
+    try {
+      const p = execSync(`which ${cmd} 2>/dev/null`, { encoding: 'utf8', stdio: 'pipe' }).trim();
+      if (p && fs.existsSync(p)) return p;
+    } catch (_) {}
+  }
+
+  return null;
+}
+
 // ── 生成 config.js 内容 ────────────────────────────────────
-function buildConfigJs(dbCfg, modelCfg) {
+function buildConfigJs(dbCfg, modelCfg, chromePath) {
   const m = modelCfg || {};
+  // 路径中可能含单引号（极少见），用 JSON.stringify 安全转义后去掉外层双引号
+  const chromePathSafe = (chromePath || '').replace(/'/g, "\\'");
   return `// PostgreSQL：抓取到的文章按批写入（每 10 篇一批）
 const DB_CONFIG = {
   host: '${dbCfg.host}',
@@ -104,6 +146,10 @@ const MODEL_CONFIG = {
   base_url: '${m.baseUrl || ''}',
   temperature: 0.3
 };
+
+// Chrome/Chromium 可执行文件路径（安装时自动检测写入）
+// 留空时运行时会按内置候选路径列表依次尝试；如需指定其他路径可在此修改。
+const CHROME_EXECUTABLE = '${chromePathSafe}';
 
 /** 详情页 body 瘦身：所有站点共用的无用结构选择器，依次 remove 以减小送 LLM 的 HTML 体积 */
 const DETAIL_STRIP_SELECTORS = [
@@ -178,6 +224,7 @@ const EMBEDDING_DEDUP_THRESHOLD = 0.92;
 module.exports = {
   DB_CONFIG,
   MODEL_CONFIG,
+  CHROME_EXECUTABLE,
   SOURCES,
   DETAIL_STRIP_SELECTORS,
   OPENAI_EMBEDDING_CONFIG,
@@ -226,8 +273,27 @@ async function main() {
     }
   }
 
-  // 3. 写 config.js
-  const configContent = buildConfigJs(dbCfg, modelCfg);
+  // 3. 检测 Chrome/Chromium
+  let chromePath = '';
+  if (cliChromePath) {
+    if (fs.existsSync(cliChromePath)) {
+      chromePath = cliChromePath;
+      console.log(`✓ 使用指定浏览器：${chromePath}`);
+    } else {
+      console.warn(`⚠ 指定的 --chrome-path 不存在：${cliChromePath}，已忽略`);
+    }
+  } else {
+    const detected = detectChrome();
+    if (detected) {
+      chromePath = detected;
+      console.log(`[DETECTED_CHROME] path=${detected}`);
+    } else {
+      console.log('[DETECTED_CHROME] none');
+    }
+  }
+
+  // 4. 写 config.js
+  const configContent = buildConfigJs(dbCfg, modelCfg, chromePath);
   const configPath = path.join(__dirname, 'config.js');
   fs.writeFileSync(configPath, configContent, 'utf8');
   console.log(`✓ config.js 已写入：${configPath}`);

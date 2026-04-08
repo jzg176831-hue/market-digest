@@ -21,7 +21,7 @@ const {
   isConfigured: scheduleConfigured,
   checkRunning, setRunning, setIdle, getLastCrawlAt,
 } = require('../db/schedule');
-const { SOURCES, DETAIL_STRIP_SELECTORS } = require('../config');
+const { SOURCES, DETAIL_STRIP_SELECTORS, CHROME_EXECUTABLE = '' } = require('../config');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -642,7 +642,11 @@ async function crawlAll() {
     }
   }
 
-  // 浏览器启动：优先本机 Chrome → channel chromium → 常见系统路径
+  // 浏览器启动优先级：
+  //   0. config.js 中 CHROME_EXECUTABLE 指定路径（安装时检测写入）
+  //   1. playwright channel 'chrome'（系统 Chrome）
+  //   2. playwright channel 'chromium'（系统 Chromium）
+  //   3. 常见系统路径逐一尝试
   // 使用 playwright-core，不附带浏览器，依赖系统已安装的 Chrome 或 Chromium
   const sysChromiumPaths = [
     '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable',
@@ -653,8 +657,14 @@ async function crawlAll() {
   ];
   let browser;
   let launched = false;
-  // 1. 系统 Chrome
-  try { browser = await chromium.launch({ channel: 'chrome', headless: true }); log('使用系统 Chrome'); launched = true; } catch (_) {}
+  // 0. config.js 指定路径
+  if (!launched && CHROME_EXECUTABLE && fs.existsSync(CHROME_EXECUTABLE)) {
+    try { browser = await chromium.launch({ executablePath: CHROME_EXECUTABLE, headless: true }); log(`使用配置的浏览器: ${CHROME_EXECUTABLE}`); launched = true; } catch (_) {}
+  }
+  // 1. 系统 Chrome channel
+  if (!launched) {
+    try { browser = await chromium.launch({ channel: 'chrome', headless: true }); log('使用系统 Chrome'); launched = true; } catch (_) {}
+  }
   // 2. 系统 Chromium channel
   if (!launched) {
     try { browser = await chromium.launch({ channel: 'chromium', headless: true }); log('使用系统 Chromium'); launched = true; } catch (_) {}

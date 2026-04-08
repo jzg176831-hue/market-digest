@@ -38,12 +38,14 @@ cd <技能目录> && npm install
 
 ---
 
-## 第 4 步：配置 LLM 模型
+## 第 4 步：运行 setup.js（自动检测模型 & Chrome）
 
-> **说明**：`setup.js` 会在启动时尝试读取已知 AI 框架在本机的配置文件（如
-> `~/.openclaw/openclaw.json` 等），若找到模型信息则自动写入 `config.js`，
-> 同时在输出中打印 `[DETECTED_MODEL]` 行，Agent 据此询问用户是否使用该模型。
-> 这是**读本地磁盘文件**实现的，与 LLM 本身无关。
+> **说明**：`setup.js` 会自动做两件事：
+> 1. 读取已知 AI 框架的本机配置文件（如 `~/.openclaw/openclaw.json`），提取模型信息；
+> 2. 检测系统中已安装的 Chrome/Chromium 路径（检查常见安装目录 + `which` 命令）。
+>
+> 两者都是**读本地磁盘/命令**实现的，与 LLM 自身无关。
+> 检测结果分别以 `[DETECTED_MODEL]` 和 `[DETECTED_CHROME]` 行输出，Agent 据此与用户交互。
 
 先运行以下命令（仅传数据库参数）：
 
@@ -56,16 +58,18 @@ node <技能目录>/setup.js \
   --db-pass <password>
 ```
 
-### 情况 A：输出包含 `[DETECTED_MODEL] source=xxx model=xxx base_url=xxx`
+### 4A：处理模型配置（`[DETECTED_MODEL]` 行）
 
-说明在本机找到了框架配置文件并读取到了模型信息。询问用户：
+**若输出包含 `[DETECTED_MODEL] source=xxx model=xxx base_url=xxx`**：
+
+询问用户：
 
 > "检测到你当前配置的模型是 **[model]**（来自 [source]），是否用这个模型生成日报？"
 
-- **用户确认** → `config.js` 已自动写入，继续第 5 步。
-- **用户想换其他模型** → 按情况 B 重新运行。
+- **用户确认** → `config.js` 已自动写入，继续 4B。
+- **用户想换其他模型** → 见下方「需要重新指定」。
 
-### 情况 B：输出包含 `[DETECTED_MODEL] none`，或用户要指定其他模型
+**若输出包含 `[DETECTED_MODEL] none`，或用户要指定其他模型**：
 
 逐一询问：
 
@@ -73,7 +77,51 @@ node <技能目录>/setup.js \
 2. "请提供 API Key"
 3. "请提供 API Base URL（如 `https://api.openai.com/v1`）"
 
-收集完毕后，重新运行 setup.js 并传入模型参数：
+收集后，见第 4 步末尾「重新运行 setup.js」。
+
+---
+
+### 4B：处理 Chrome/Chromium（`[DETECTED_CHROME]` 行）
+
+**若输出包含 `[DETECTED_CHROME] path=<路径>`**：
+
+告知用户：
+
+> "检测到系统已安装浏览器：**[路径]**，将直接使用，无需额外操作。"
+
+继续第 5 步。
+
+**若输出包含 `[DETECTED_CHROME] none`（未找到浏览器）**：
+
+询问用户：
+
+> "未检测到 Chrome/Chromium，抓取功能需要浏览器才能运行。是否现在自动安装？"
+
+- **用户选择跳过** → 跳过，继续第 5 步，并提醒：
+  > "⚠️ 后续使用抓取功能前，请手动安装 Chrome/Chromium：
+  > - macOS：`brew install --cask google-chrome`
+  > - Ubuntu/Debian：`sudo apt install -y chromium-browser`"
+
+- **用户同意自动安装** → 根据系统尝试安装：
+
+  ```bash
+  # macOS（需要 Homebrew）
+  brew install --cask google-chrome
+
+  # Ubuntu/Debian
+  sudo apt install -y chromium-browser
+
+  # 其他系统，参照系统包管理器
+  ```
+
+  - **安装成功** → 重新运行 setup.js（见下方「重新运行」），写入检测到的路径，继续第 5 步。
+  - **安装失败** → 跳过，继续第 5 步，并提醒用户手动安装（同上）。
+
+---
+
+### 重新运行 setup.js（有额外参数时）
+
+如需同时传入模型和/或 Chrome 路径，组合以下参数重新运行：
 
 ```bash
 node <技能目录>/setup.js \
@@ -82,9 +130,8 @@ node <技能目录>/setup.js \
   --db-name <dbname> \
   --db-user <user> \
   --db-pass <password> \
-  --model <model> \
-  --api-key <api_key> \
-  --base-url <base_url>
+  [--model <model> --api-key <api_key> --base-url <base_url>] \
+  [--chrome-path <chrome可执行文件路径>]
 ```
 
 - 退出码 **0**：配置成功，继续第 5 步

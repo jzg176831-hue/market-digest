@@ -64,9 +64,16 @@ const OPENAI_EMBEDDING_CONFIG = {
 // Embedding 相似度去重阈值（余弦相似度，0～1）
 const EMBEDDING_DEDUP_THRESHOLD = 0.92;
 
+// Chrome/Chromium 可执行文件路径（安装时由 setup.js 自动检测写入）
+// 留空时运行时会按内置候选路径列表依次尝试；如需手动指定可填写完整路径。
+// 示例（macOS）：'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+// 示例（Linux）：'/usr/bin/google-chrome'
+const CHROME_EXECUTABLE = '';
+
 module.exports = {
   DB_CONFIG,
   MODEL_CONFIG,
+  CHROME_EXECUTABLE,
   SOURCES,
   DETAIL_STRIP_SELECTORS,
   OPENAI_EMBEDDING_CONFIG,

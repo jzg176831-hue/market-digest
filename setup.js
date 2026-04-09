@@ -6,6 +6,7 @@
  *   1. 解析 CLI 参数中的数据库连接信息
  *   2. 测试数据库连接
  *   3. 将配置写入 config.js
+ *   4. 测试 LLM 连接
  *
  * 用法：
  *   node setup.js \
@@ -21,6 +22,7 @@
  */
 
 const { Pool }      = require('pg');
+const axios         = require('axios');
 const { execSync }  = require('child_process');
 const fs            = require('fs');
 const path          = require('path');
@@ -138,8 +140,7 @@ const DB_CONFIG = {
   password: '${dbCfg.password}'
 };
 
-// LLM 主模型配置
-// 优先使用这里的值；留空时自动从已知框架配置文件中读取当前默认模型。
+// LLM 主模型配置（必填，留空运行时报错）
 const MODEL_CONFIG = {
   model: '${m.model || ''}',
   api_key: '${m.apiKey || ''}',
@@ -297,6 +298,26 @@ async function main() {
   const configPath = path.join(__dirname, 'config.js');
   fs.writeFileSync(configPath, configContent, 'utf8');
   console.log(`✓ config.js 已写入：${configPath}`);
+
+  // 5. 测试 LLM 连接（若有模型配置）
+  if (modelCfg && modelCfg.apiKey && modelCfg.baseUrl) {
+    console.log(`正在测试 LLM 连接（${modelCfg.model}）...`);
+    try {
+      const url = `${modelCfg.baseUrl.replace(/\/$/, '')}/chat/completions`;
+      await axios.post(
+        url,
+        { model: modelCfg.model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 },
+        { headers: { Authorization: `Bearer ${modelCfg.apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000 }
+      );
+      console.log('[LLM_TEST] ok');
+    } catch (e) {
+      const status = e?.response?.status;
+      const body   = JSON.stringify(e?.response?.data || '').slice(0, 200);
+      console.log(`[LLM_TEST] fail status=${status || 'network'} body=${body}`);
+    }
+  } else {
+    console.log('[LLM_TEST] skip（无模型配置）');
+  }
 
   console.log('');
   console.log('✓ 配置完成！');

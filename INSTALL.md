@@ -137,6 +137,14 @@ node <技能目录>/setup.js \
 - 退出码 **0**：配置成功，继续第 5 步
 - 退出码 **1**：失败，将错误信息告知用户
 
+### 4C：处理 LLM 连接测试（`[LLM_TEST]` 行）
+
+**若输出包含 `[LLM_TEST] ok`**：LLM 连接正常，继续第 5 步。
+
+**若输出包含 `[LLM_TEST] fail`**：LLM 连接失败。告知用户连接失败及错误详情，请其重新提供正确的模型名称、API Key、Base URL，然后重新运行 setup.js（见上方「重新运行」）。
+
+**若输出包含 `[LLM_TEST] skip`**：未配置模型，继续第 5 步（setup.js 仍会写入空配置，运行时才报错）。
+
 ---
 
 ## 第 5 步：配置定时任务
@@ -152,41 +160,65 @@ node <技能目录>/setup.js \
 
 ### 方式 A：OpenClaw 框架
 
+**5A-1：询问日报推送渠道**
+
+读取 `~/.openclaw/openclaw.json`，查看 `channels` 字段中已配置的渠道（如 `feishu`、`wecom`）。根据情况询问用户：
+
+- **未配置任何渠道**：
+  > "你尚未在 OpenClaw 中配置飞书或企业微信等通知渠道。每日日报生成后将不推送到任何渠道，仅在框架内部记录。是否继续？"
+  - 用户确认 → 继续，`delivery` 字段中不加 `channel`
+  - 用户希望配置渠道 → 请用户先在 openclaw.json 中配置渠道，再回来继续
+
+- **只有一个渠道**（如只有 feishu）：
+  > "检测到你已配置 [渠道名] 渠道。每日日报是否推送到该渠道？"
+  - 用户确认 → `delivery.channel` 填该渠道名
+  - 用户不想推送 → `delivery` 字段中不加 `channel`
+
+- **多个渠道**（如同时有 feishu 和 wecom）：
+  > "检测到你配置了多个渠道：[渠道列表]。每日日报推送到哪个渠道？（也可选择不推送）"
+  - 用户选择某渠道 → `delivery.channel` 填该渠道名
+  - 用户不想推送 → `delivery` 字段中不加 `channel`
+
+**5A-2：写入定时任务**
+
 OpenClaw 的定时任务写在 `~/.openclaw/cron/jobs.json`。
-在该文件的 JSON 数组中追加以下两个条目（文件不存在则新建）：
+在该文件的 JSON 数组中追加以下两个条目（文件不存在则新建）；每日日报任务的 `delivery.channel` 根据上一步结果填入或省略，每小时抓取任务无需 `delivery`：
 
 ```json
 [
   {
-    "jobId": "market-digest-daily",
     "name": "金融市场日报 - 每日8点",
     "enabled": true,
     "schedule": { "kind": "cron", "expr": "0 8 * * *", "tz": "Asia/Shanghai" },
     "sessionTarget": "isolated",
+    "wakeMode": "now",
     "payload": {
       "kind": "agentTurn",
-      "message": "生成财经日报",
-      "timeoutSeconds": 1800,
-      "toolsAllow": ["exec", "read", "write"]
+      "message": "执行 market-digest skill，生成财经日报",
+      "timeoutSeconds": 1800
+    },
+    "delivery": {
+      "mode": "announce"
     }
   },
   {
-    "jobId": "market-digest-fetch",
     "name": "金融市场日报 - 每小时抓取",
     "enabled": true,
     "schedule": { "kind": "cron", "expr": "0 0-7,9-23 * * *", "tz": "Asia/Shanghai" },
     "sessionTarget": "isolated",
+    "wakeMode": "now",
     "payload": {
       "kind": "agentTurn",
-      "message": "抓一下财经新闻",
-      "timeoutSeconds": 3600,
-      "toolsAllow": ["exec", "read", "write"]
+      "message": "执行 market-digest skill，爬财经新闻",
+      "timeoutSeconds": 3600
     }
   }
 ]
 ```
 
-> **说明**：OpenClaw cron 通过向 Agent 发消息触发，Agent 收到后根据 SKILL.md 的触发词路由到对应脚本，不需要直接填命令行。
+> 若日报需推送到指定渠道，在第一个任务的 `delivery` 中加 `"channel": "feishu"`（或 `"wecom"` 等）。
+
+> **说明**：OpenClaw cron 通过向 Agent 发消息触发，Agent 收到后根据 SKILL.md 的触发词路由到 market-digest skill，不需要直接填命令行。
 
 写入后确认 `~/.openclaw/openclaw.json` 中 cron 已启用：
 

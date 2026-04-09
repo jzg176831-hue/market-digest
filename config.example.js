@@ -7,10 +7,8 @@
  *
  * 【DB】必填：在 DB_CONFIG 里填入数据库连接信息。
  *
- * 【LLM 主模型】可选：
- *   启动时会自动尝试从已知 AI 框架的配置文件中读取当前默认模型
- *   的 baseUrl / apiKey / model，若能读到则无需在这里填写。
- *   读不到，或想使用与框架默认不同的模型时，才填 MODEL_CONFIG。
+ * 【LLM 主模型】必填：填写 MODEL_CONFIG 中的 model、api_key、base_url。
+ *   留空则运行时报错。安装时由 setup.js 自动写入。
  *
  * 【Embedding】可选：填写 OPENAI_EMBEDDING_CONFIG 中的 api_key、base_url、model（三者与服务商一致；api_key 留空则跳过向量去重，效果略弱但仍可运行）。
  * ─────────────────────────────────────────────────────
@@ -25,9 +23,7 @@ const DB_CONFIG = {
   password: 'YOUR_DB_PASSWORD',
 };
 
-// LLM 主模型配置
-// 优先级：这里 → 框架配置文件中检测到的默认模型（兜底）
-// 填了就用这里的；留空时自动用框架当前配置的模型
+// LLM 主模型配置（必填，留空运行时报错）
 const MODEL_CONFIG = {
   model:       'deepseek-v3-1-250821',
   api_key:     'YOUR_LLM_API_KEY',

@@ -3,6 +3,7 @@ config.js
 
 # 依赖
 node_modules/
+package-lock.json
 
 # 运行时产物
 logs/
